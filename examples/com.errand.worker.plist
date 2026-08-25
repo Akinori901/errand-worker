@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS LaunchAgent for errand-worker (polls forever, restarts on crash).
+
+  Setup:
+    1) copy to ~/Library/LaunchAgents/com.errand.worker.plist
+    2) edit the paths below for your machine
+    3) launchctl load ~/Library/LaunchAgents/com.errand.worker.plist
+       (unload to stop; `launchctl list | grep errand` to check)
+
+  Runs only while you are logged in; pauses while the Mac sleeps (resumes on wake).
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.errand.worker</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/path/to/errand-worker/.venv/bin/python</string>
+    <string>-m</string>
+    <string>errand_worker</string>
+    <string>run</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/path/to/errand-worker</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/path/to/errand-worker/.errand/worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>/path/to/errand-worker/.errand/worker.err.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/YOU/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>

@@ -1,0 +1,32 @@
+[project]
+name = "errand-worker"
+version = "0.1.0"
+description = "Turn Claude Code into a self-hosted async AI worker — subscription-based, local-first, no API key."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Akinori901" }]
+keywords = ["claude", "claude-code", "worker", "job-queue", "ai", "self-hosted", "anthropic"]
+dependencies = []
+
+[project.optional-dependencies]
+# AWS adapters (DynamoDB store / S3 sink) — only needed if ERRAND_STORE/SINK use them.
+aws = ["boto3>=1.34"]
+dev = ["ruff>=0.9,<1.0", "pytest>=8.0"]
+
+[project.scripts]
+errand-worker = "errand_worker.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/Akinori901/errand-worker"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["errand_worker"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"

@@ -1,0 +1,25 @@
+# systemd user unit for errand-worker (Linux).
+#
+# Setup:
+#   cp examples/errand-worker.service ~/.config/systemd/user/
+#   # edit paths below, then:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now errand-worker
+#   journalctl --user -u errand-worker -f     # logs
+#
+# Note: the `claude` CLI must be logged in for the user this runs as.
+
+[Unit]
+Description=errand-worker (Claude Code job worker)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/errand-worker
+ExecStart=/path/to/errand-worker/.venv/bin/python -m errand_worker run
+Restart=always
+RestartSec=5
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

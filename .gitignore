@@ -1,0 +1,22 @@
+# Runtime state
+.errand/
+*.log
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
