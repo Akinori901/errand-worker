@@ -1,77 +1,78 @@
 # errand-worker
 
-**Turn Claude Code into a self-hosted, asynchronous AI worker.**
+**日本語** | [English](README.en.md)
 
-Enqueue an *errand* (a prompt — optionally with a codebase to read); a small
-worker running on your machine, **under your Claude subscription**, processes it
-and writes the result. Your web app just drops jobs on a queue and reads results.
+**Claude Code を、自前ホストの非同期 AI ワーカーにする。**
+
+*用事（errand）* — プロンプト、必要なら読ませたいコードベース付き — をキューに積むと、
+手元のマシンで動く小さなワーカーが **あなたの Claude サブスクリプションで** それを処理し、
+結果を書き出します。Web アプリ側はキューにジョブを置き、結果を読むだけです。
 
 ```
-[your web app] --enqueue--> [queue] <--poll-- [errand-worker] --claude -p--> [result]
-                              │                     (your Mac, your subscription)
-              LocalFile (default, no cloud)
-              DynamoDB / … (adapters)
+[あなたのWebアプリ] --積む--> [キュー] <--取得-- [errand-worker] --claude -p--> [結果]
+                                │                  （あなたのMac／あなたのサブスク）
+              LocalFile（既定・クラウド不要）
+              DynamoDB / …（アダプタ）
 ```
 
-## Why
+## 何が嬉しいか
 
-- **Subscription, not API keys.** It shells out to the local `claude` CLI (Claude
-  Code), which runs under your logged-in subscription. No `ANTHROPIC_API_KEY`, no
-  per-token billing — build AI features on a flat rate.
-- **Local-first.** The default job store is plain files and the default sink is a
-  local directory. `git clone`, run, and it works — **no AWS account required.**
-- **Keeps code local.** A job can point at a codebase (`cwd`); Claude reads it
-  **on your machine** with read-only tools. The source never leaves for a cloud
-  API — useful when an NDA forbids sending client code to third-party APIs.
-- **Simple async job pattern.** Web → queue → worker → result. Swap the queue
-  (files / DynamoDB / your own) and the sink (dir / S3 / your own) via small
-  adapters.
+- **APIキーではなくサブスクリプション。** ローカルの `claude` CLI（Claude Code）を
+  呼び出すので、ログイン済みのサブスクリプションで動きます。`ANTHROPIC_API_KEY` は不要、
+  トークン従量課金もありません — **定額のまま AI 機能を作れます。**
+- **ローカル完結が既定。** ジョブの保管先は素のファイル、結果の出力先はローカルの
+  ディレクトリです。`git clone` してすぐ動きます — **AWS アカウントは不要です。**
+- **コードを外に出さない。** ジョブにはコードベース（`cwd`）を指定でき、Claude は
+  **あなたのマシン上で** 読み取り専用ツールを使って読みます。ソースがクラウドの API へ
+  送られることはありません — 顧客コードの外部送信を NDA が禁じている場合に有効です。
+- **素直な非同期ジョブ構成。** Web → キュー → ワーカー → 結果。キュー（ファイル /
+  DynamoDB / 自作）も出力先（ディレクトリ / S3 / 自作）も、小さなアダプタで差し替えられます。
 
-## ⚠️ Terms of use
+## ⚠️ 利用規約について
 
-`errand-worker` is meant for **an individual running jobs for themselves** on
-their own Claude Code environment. Using a Claude subscription as the generation
-engine of a **SaaS served to third parties** may violate Anthropic's terms of
-service. Check the current terms before doing that.
+`errand-worker` は **個人が自分の Claude Code 環境で、自分のためにジョブを処理する**
+用途を想定しています。Claude のサブスクリプションを **第三者に提供する SaaS の生成エンジン**
+として使うことは、Anthropic の利用規約に抵触する可能性があります。
+そうした使い方をする前に、必ず最新の規約を確認してください。
 
-## Requirements
+## 必要なもの
 
-- Python 3.10+
-- The `claude` CLI (Claude Code) installed and logged in, on your `PATH`
-  (`claude --version` should work).
+- Python 3.10 以上
+- `claude` CLI（Claude Code）がインストール済み・ログイン済みで `PATH` にあること
+  （`claude --version` が通ること）
 
-## Quickstart (60 seconds, no cloud)
+## クイックスタート（60秒・クラウド不要）
 
 ```bash
 git clone https://github.com/Akinori901/errand-worker
 cd errand-worker
 
-# 1. enqueue an errand
-python -m errand_worker enqueue "Say exactly: hello from errand-worker"
+# 1. 用事を積む
+python -m errand_worker enqueue "「hello from errand-worker」とだけ返して"
 
-# 2. process one job (invokes your local claude)
+# 2. 1件だけ処理する（ローカルの claude が呼ばれる）
 python -m errand_worker once
 
-# 3. read the result
+# 3. 結果を読む
 cat .errand/results/default/*.txt
 ```
 
-Point a job at a codebase so Claude can ground its answer in real code:
+コードベースを指定すれば、実際のコードに基づいて答えさせられます:
 
 ```bash
-python -m errand_worker enqueue "Summarise what this repo does in 2 lines" --cwd "$(pwd)"
+python -m errand_worker enqueue "このリポジトリが何をするものか2行で説明して" --cwd "$(pwd)"
 python -m errand_worker once
 ```
 
-Run it as a daemon (polls forever; keep it alive with launchd/systemd):
+常駐させる（ポーリングし続けます。launchd / systemd で生かしておいてください）:
 
 ```bash
 python -m errand_worker run
 ```
 
-## The job contract
+## ジョブの形式
 
-A queue item is just JSON:
+キューの1件は、ただの JSON です:
 
 ```json
 {
@@ -79,43 +80,44 @@ A queue item is just JSON:
   "owner": "default",
   "status": "queued",           // queued -> running -> done | error
   "prompt": "…",
-  "cwd": "/path/to/code",        // optional: a codebase Claude may read
-  "model": "opus",              // optional
-  "result_ref": null,            // filled on done: where the result was written
+  "cwd": "/path/to/code",        // 任意: Claude に読ませるコードベース
+  "model": "opus",              // 任意
+  "result_ref": null,            // 完了時に埋まる: 結果の書き出し先
   "error": null
 }
 ```
 
-Your web backend enqueues by writing such an item to the store; the worker does
-the rest. To integrate a real web app, write items to the same store the worker
-polls (files by default, or DynamoDB with `ERRAND_STORE=dynamodb`).
+Web バックエンドはこの形式の項目を保管先へ書き込むだけで、あとはワーカーが処理します。
+実際の Web アプリと繋ぐときは、**ワーカーがポーリングしているのと同じ保管先** へ
+書き込んでください（既定はファイル、`ERRAND_STORE=dynamodb` なら DynamoDB）。
 
-## Configuration (env / `.env`)
+## 設定（環境変数 / `.env`）
 
-| Variable | Default | Meaning |
+| 変数 | 既定値 | 意味 |
 |---|---|---|
-| `ERRAND_OWNER` | `default` | partition key — lets one queue serve many users/apps |
-| `ERRAND_STORE` | `local` | `local` (files) or `dynamodb` |
-| `ERRAND_SINK` | `local` | `local` (dir) or `s3` |
-| `ERRAND_LOCAL_STORE` | `.errand/jobs` | local queue dir |
-| `ERRAND_RESULTS_DIR` | `.errand/results` | local results dir |
-| `ERRAND_JOBS_TABLE` | `errand-jobs` | DynamoDB table (store=dynamodb) |
-| `ERRAND_S3_BUCKET` | — | S3 bucket (sink=s3) |
-| `ERRAND_POLL_INTERVAL` | `5` | seconds between polls when idle |
-| `ERRAND_CLAUDE_BIN` | `claude` | path to the Claude Code CLI |
-| `ERRAND_DEFAULT_MODEL` | `sonnet` | model when a job omits one |
-| `ERRAND_CLAUDE_CWD` | — | default codebase root (a job's own `cwd` overrides) |
-| `ERRAND_CLAUDE_TIMEOUT` | `900` | per-job claude timeout (s) |
-| `AWS_REGION` / `AWS_PROFILE` | `us-east-1` / — | for the AWS adapters |
+| `ERRAND_OWNER` | `default` | パーティションキー。1つのキューを複数ユーザ/アプリで共有できる |
+| `ERRAND_STORE` | `local` | `local`（ファイル）または `dynamodb` |
+| `ERRAND_SINK` | `local` | `local`（ディレクトリ）または `s3` |
+| `ERRAND_LOCAL_STORE` | `.errand/jobs` | ローカルキューのディレクトリ |
+| `ERRAND_RESULTS_DIR` | `.errand/results` | ローカル結果のディレクトリ |
+| `ERRAND_JOBS_TABLE` | `errand-jobs` | DynamoDB のテーブル名（store=dynamodb のとき） |
+| `ERRAND_S3_BUCKET` | — | S3 バケット名（sink=s3 のとき） |
+| `ERRAND_POLL_INTERVAL` | `5` | 空のときのポーリング間隔（秒） |
+| `ERRAND_CLAUDE_BIN` | `claude` | Claude Code CLI のパス |
+| `ERRAND_DEFAULT_MODEL` | `sonnet` | ジョブがモデル未指定のときの既定 |
+| `ERRAND_CLAUDE_CWD` | — | 既定のコードベース（ジョブ側の `cwd` が優先） |
+| `ERRAND_CLAUDE_TIMEOUT` | `900` | 1ジョブあたりの claude 実行上限（秒） |
+| `AWS_REGION` / `AWS_PROFILE` | `us-east-1` / — | AWS アダプタ用 |
 
-DynamoDB table key schema: partition key `owner` (S), sort key `id` (S).
-Install the AWS adapters with `pip install errand-worker[aws]`.
+DynamoDB のキー構成: パーティションキー `owner`（S）、ソートキー `id`（S）。
+AWS アダプタは `pip install errand-worker[aws]` で入ります。
 
-## Always-on (macOS launchd)
+## 常駐させる（macOS launchd）
 
-See [`examples/com.errand.worker.plist`](examples/com.errand.worker.plist).
-A systemd unit for Linux is in [`examples/errand-worker.service`](examples/errand-worker.service).
+[`examples/com.errand.worker.plist`](examples/com.errand.worker.plist) を参照してください。
+Linux 向けの systemd ユニットは
+[`examples/errand-worker.service`](examples/errand-worker.service) にあります。
 
-## License
+## ライセンス
 
 MIT
