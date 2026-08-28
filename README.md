@@ -4,6 +4,14 @@
 
 **Claude Code を、自前ホストの非同期 AI ワーカーにする。**
 
+<p>
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white">
+  <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-subscription-D97757">
+  <img alt="Local-first" src="https://img.shields.io/badge/local--first-no_cloud_required-2ea44f">
+  <img alt="Storage adapters" src="https://img.shields.io/badge/adapters-LocalFile_/_DynamoDB_/_S3-232F3E?logo=amazonwebservices&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
+</p>
+
 *用事（errand）* — プロンプト、必要なら読ませたいコードベース付き — をキューに積むと、
 手元のマシンで動く小さなワーカーが **あなたの Claude サブスクリプションで** それを処理し、
 結果を書き出します。Web アプリ側はキューにジョブを置き、結果を読むだけです。
