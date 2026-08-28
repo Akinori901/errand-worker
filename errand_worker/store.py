@@ -124,27 +124,39 @@ class DynamoJobStore:
         from boto3.dynamodb.conditions import Attr, Key
         from botocore.exceptions import ClientError
 
-        resp = self.table.query(
-            KeyConditionExpression=Key("owner").eq(owner),
-            FilterExpression=Attr("status").eq("queued"),
-            Limit=10,
-        )
-        for item in resp.get("Items", []):
-            try:
-                self.table.update_item(
-                    Key={"owner": item["owner"], "id": item["id"]},
-                    UpdateExpression="SET #s = :run, #u = :t",
-                    ConditionExpression=Attr("status").eq("queued"),
-                    ExpressionAttributeNames={"#s": "status", "#u": "updated_at"},
-                    ExpressionAttributeValues={":run": "running", ":t": _now()},
-                )
-                item["status"] = "running"
-                return Job.from_item(item)
-            except ClientError as e:
-                if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                    continue  # another worker won it
-                raise
-        return None
+        # DynamoDB's Limit caps items READ (before filtering). With Limit=N +
+        # FilterExpression(status=queued), the query reads only the first N items
+        # of the partition (ascending sort-key = oldest first) and then filters.
+        # Once N done jobs accumulate at the front, the newer queued jobs at the
+        # tail are never reached -> "jobs are enqueued but never processed".
+        # So we drop Limit and page with LastEvaluatedKey until a queued job is found.
+        last_key: dict | None = None
+        while True:
+            kwargs: dict = {
+                "KeyConditionExpression": Key("owner").eq(owner),
+                "FilterExpression": Attr("status").eq("queued"),
+            }
+            if last_key:
+                kwargs["ExclusiveStartKey"] = last_key
+            resp = self.table.query(**kwargs)
+            for item in resp.get("Items", []):
+                try:
+                    self.table.update_item(
+                        Key={"owner": item["owner"], "id": item["id"]},
+                        UpdateExpression="SET #s = :run, #u = :t",
+                        ConditionExpression=Attr("status").eq("queued"),
+                        ExpressionAttributeNames={"#s": "status", "#u": "updated_at"},
+                        ExpressionAttributeValues={":run": "running", ":t": _now()},
+                    )
+                    item["status"] = "running"
+                    return Job.from_item(item)
+                except ClientError as e:
+                    if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                        continue  # another worker won it
+                    raise
+            last_key = resp.get("LastEvaluatedKey")
+            if not last_key:
+                return None
 
     def _update(self, job: Job, status: str, **extra: str) -> None:
         # status is a DynamoDB reserved word — alias every attribute name.

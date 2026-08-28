@@ -41,6 +41,10 @@
   <dict>
     <key>PATH</key>
     <string>/Users/YOU/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <!-- Flush stdout immediately. Without this, print() output is buffered and
+         never reaches worker.log, making a running worker look like it's stuck. -->
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
   </dict>
 </dict>
 </plist>
