@@ -3,6 +3,7 @@
 Everything defaults to a local, cloud-free setup so ``errand-worker`` runs
 right after ``git clone``. Set ``ERRAND_STORE=dynamodb`` to switch to AWS.
 """
+
 from __future__ import annotations
 
 import os

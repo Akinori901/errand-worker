@@ -11,6 +11,7 @@ is used or required; the CLI runs under your logged-in subscription.
     Code environment. Using a Claude subscription as the generation engine of a
     SaaS served to third parties may violate Anthropic's terms — check them.
 """
+
 from __future__ import annotations
 
 import subprocess

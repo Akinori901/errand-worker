@@ -3,6 +3,7 @@
 Enqueue a job (a prompt, optionally a codebase to read); a local worker running
 under your Claude subscription processes it and writes the result. No API key.
 """
+
 from .config import Config
 from .sink import LocalSink, S3Sink, Sink
 from .store import DynamoJobStore, Job, JobStore, LocalJobStore

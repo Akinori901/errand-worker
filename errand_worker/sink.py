@@ -3,6 +3,7 @@
 The worker writes a job's result somewhere and records a reference (``result_ref``)
 back on the job. Local directory by default (no cloud); S3 adapter for production.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

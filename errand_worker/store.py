@@ -9,6 +9,7 @@ an optional ``cwd`` (a codebase to let Claude read), and a ``model``. The
 worker is not tied to any particular application; callers enqueue jobs and
 read results by ``result_ref``.
 """
+
 from __future__ import annotations
 
 import json
@@ -95,9 +96,7 @@ class LocalJobStore:
 
     def _save(self, job: Job) -> None:
         job.updated_at = _now()
-        self._path(job).write_text(
-            json.dumps(asdict(job), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        self._path(job).write_text(json.dumps(asdict(job), ensure_ascii=False, indent=2), encoding="utf-8")
 
     def claim_next(self, owner: str) -> Job | None:
         for p in sorted(self.dir.glob(f"{check_id('owner', owner)}__*.json")):
