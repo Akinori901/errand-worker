@@ -17,8 +17,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from .config import Config
 from .sink import Sink
@@ -103,6 +103,7 @@ def run_claude(cfg: Config, job: Job) -> str:
             capture_output=True,
             text=True,
             timeout=cfg.claude_timeout,
+            check=False,  # returncode is inspected below to include stderr in the error
         )
     if proc.returncode != 0:
         raise RuntimeError(f"claude CLI failed (rc={proc.returncode}): {proc.stderr[:500]}")

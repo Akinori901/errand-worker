@@ -45,7 +45,7 @@ class Job:
     updated_at: str = ""
 
     @classmethod
-    def from_item(cls, item: dict[str, Any]) -> "Job":
+    def from_item(cls, item: dict[str, Any]) -> Job:
         known = {f: item.get(f) for f in cls.__dataclass_fields__}
         return cls(**{k: v for k, v in known.items() if v is not None})
 

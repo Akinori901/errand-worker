@@ -60,7 +60,7 @@ class Config:
     allowed_roots: list[Path]
 
     @classmethod
-    def load(cls) -> "Config":
+    def load(cls) -> Config:
         _load_dotenv()
         e = os.environ.get
         cwd = e("ERRAND_CLAUDE_CWD")
