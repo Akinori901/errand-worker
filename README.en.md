@@ -30,9 +30,12 @@ and writes the result. Your web app just drops jobs on a queue and reads results
   per-token billing — build AI features on a flat rate.
 - **Local-first.** The default job store is plain files and the default sink is a
   local directory. `git clone`, run, and it works — **no AWS account required.**
-- **Keeps code local.** A job can point at a codebase (`cwd`); Claude reads it
-  **on your machine** with read-only tools. The source never leaves for a cloud
-  API — useful when an NDA forbids sending client code to third-party APIs.
+- **No repository upload.** A job can point at a codebase (`cwd`); Claude reads it
+  **on your machine** with read-only tools. You never put the repository in cloud
+  storage or another SaaS.
+  Note that **whatever Claude reads is sent to Anthropic's API, exactly as when you
+  use Claude Code interactively.** For client code, check that your NDA permits
+  sending it to Anthropic (prompt masking can be plugged in via the `PreProcess` hook).
 - **Simple async job pattern.** Web → queue → worker → result. Swap the queue
   (files / DynamoDB / your own) and the sink (dir / S3 / your own) via small
   adapters.
