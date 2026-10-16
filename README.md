@@ -128,4 +128,4 @@ Linux 向けの systemd ユニットは
 
 ## ライセンス
 
-MIT
+[MIT](LICENSE)

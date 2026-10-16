@@ -128,4 +128,4 @@ A systemd unit for Linux is in [`examples/errand-worker.service`](examples/erran
 
 ## License
 
-MIT
+[MIT](LICENSE)
