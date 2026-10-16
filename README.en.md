@@ -115,11 +115,25 @@ polls (files by default, or DynamoDB with `ERRAND_STORE=dynamodb`).
 | `ERRAND_CLAUDE_BIN` | `claude` | path to the Claude Code CLI |
 | `ERRAND_DEFAULT_MODEL` | `sonnet` | model when a job omits one |
 | `ERRAND_CLAUDE_CWD` | — | default codebase root (a job's own `cwd` overrides) |
+| `ERRAND_ALLOWED_ROOTS` | `ERRAND_CLAUDE_CWD` | dirs a job's `cwd` must be inside (`:`-separated). Unset: jobs can't choose a `cwd` |
 | `ERRAND_CLAUDE_TIMEOUT` | `900` | per-job claude timeout (s) |
 | `AWS_REGION` / `AWS_PROFILE` | `us-east-1` / — | for the AWS adapters |
 
 DynamoDB table key schema: partition key `owner` (S), sort key `id` (S).
 Install the AWS adapters with `pip install errand-worker[aws]`.
+
+## Security
+
+Jobs are enqueued by a web backend, so the worker treats their content as **untrusted input**.
+
+| Threat | Mitigation |
+|---|---|
+| CLI option injection via the prompt | the prompt goes to stdin, never argv |
+| Reading outside the codebase | a job's `cwd` must be inside `ERRAND_ALLOWED_ROOTS` (`..` and symlinks resolved first) |
+| Tool abuse | `--tools` limits what exists in the run (codebase: `Read,Glob,Grep` / none: no tools); text-only jobs run in an empty temp dir |
+| Reaching your MCP servers | `--strict-mcp-config` loads none |
+| Hooks planted in the codebase | `--setting-sources user` ignores the codebase's `.claude/settings.json` |
+| Path traversal in result files | `owner` and `id` are limited to alphanumerics and `. _ @ + -` |
 
 ## Always-on (macOS launchd)
 
