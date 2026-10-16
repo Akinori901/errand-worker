@@ -21,7 +21,7 @@ from typing import Callable
 
 from .config import Config
 from .sink import Sink
-from .store import Job, JobStore
+from .store import Job, JobStore, check_id
 
 # A pre-processing hook: transform the prompt before it reaches Claude
 # (e.g. redaction/masking). Default is identity. Return the text to send.
@@ -95,6 +95,9 @@ def run_claude(cfg: Config, job: Job) -> str:
 
 
 def process(cfg: Config, store: JobStore, sink: Sink, job: Job, pre: PreProcess) -> None:
+    # Reject unsafe ids before spending a Claude run on the job.
+    check_id("owner", job.owner)
+    check_id("id", job.id)
     print(f"[job {job.id}] owner={job.owner} cwd={job.cwd or '-'} -> running")
     prompt = pre(job, job.prompt)
     job.prompt = prompt

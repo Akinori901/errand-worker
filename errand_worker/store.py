@@ -12,6 +12,7 @@ read results by ``result_ref``.
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -49,6 +50,19 @@ class Job:
         return cls(**{k: v for k, v in known.items() if v is not None})
 
 
+# owner and id become file names (LocalJobStore / LocalSink) and S3 keys, and
+# jobs are enqueued by a web backend — so treat them as untrusted. Without this,
+# an id like "../../.ssh/authorized_keys" would write outside the results dir.
+_SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}")
+
+
+def check_id(kind: str, value: str) -> str:
+    """Return ``value`` if it is safe as a path segment, else raise ValueError."""
+    if not isinstance(value, str) or not _SAFE_ID.fullmatch(value):
+        raise ValueError(f"invalid {kind}: must match {_SAFE_ID.pattern}")
+    return value
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -71,7 +85,7 @@ class LocalJobStore:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def _path(self, job: Job) -> Path:
-        return self.dir / f"{job.owner}__{job.id}.json"
+        return self.dir / f"{check_id('owner', job.owner)}__{check_id('id', job.id)}.json"
 
     def enqueue(self, job: Job) -> Job:
         job.status = "queued"
@@ -86,7 +100,7 @@ class LocalJobStore:
         )
 
     def claim_next(self, owner: str) -> Job | None:
-        for p in sorted(self.dir.glob(f"{owner}__*.json")):
+        for p in sorted(self.dir.glob(f"{check_id('owner', owner)}__*.json")):
             item = json.loads(p.read_text(encoding="utf-8"))
             if item.get("status") == "queued":
                 job = Job.from_item(item)
