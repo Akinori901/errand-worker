@@ -41,7 +41,10 @@ def run_claude(cfg: Config, job: Job) -> str:
     model = job.model or cfg.default_model
     cwd = job.cwd or (str(cfg.claude_cwd) if cfg.claude_cwd else None)
 
-    args = [cfg.claude_bin, "-p", job.prompt, "--model", model]
+    # The prompt goes to stdin, never argv: a prompt starting with "-" would
+    # otherwise be parsed as a CLI option (argument injection), and argv is
+    # visible to other local users via the process list.
+    args = [cfg.claude_bin, "-p", "--model", model]
     if cwd:
         # Ground the answer in the codebase, read-only, bounded.
         args += ["--allowedTools", "Read,Glob,Grep", "--max-turns", "25"]
@@ -50,6 +53,7 @@ def run_claude(cfg: Config, job: Job) -> str:
 
     proc = subprocess.run(
         args,
+        input=job.prompt,
         cwd=cwd,
         capture_output=True,
         text=True,

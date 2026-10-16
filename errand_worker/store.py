@@ -25,7 +25,7 @@ class Job:
     id:         unique job id (caller-supplied; ULID/UUID recommended)
     owner:      partition key — lets one queue serve multiple users/apps
     status:     queued -> running -> done | error
-    prompt:     the instruction passed to Claude (``claude -p <prompt>``)
+    prompt:     the instruction passed to Claude (``claude -p``, via stdin)
     cwd:        optional path to a codebase Claude may read (Read/Glob/Grep)
     model:      optional model alias (e.g. "opus", "sonnet")
     result_ref: filled on completion — where the result was written (sink key)
