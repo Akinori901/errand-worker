@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 from typing import Callable
 
 from .config import Config
@@ -68,6 +69,23 @@ def build_args(cfg: Config, job: Job, cwd: str | None) -> list[str]:
     return args
 
 
+def resolve_cwd(cfg: Config, job: Job) -> str | None:
+    """Return the directory Claude runs in, refusing a job cwd outside allowed roots.
+
+    Symlinks and ".." are resolved first, so a job can't escape a root with
+    "root/../.." or a link pointing elsewhere.
+    """
+    if not job.cwd:
+        return str(cfg.claude_cwd) if cfg.claude_cwd else None
+    target = Path(job.cwd).expanduser().resolve()
+    for root in cfg.allowed_roots:
+        if target.is_relative_to(root.expanduser().resolve()):
+            if not target.is_dir():
+                raise ValueError(f"job cwd is not a directory: {target}")
+            return str(target)
+    raise ValueError("job cwd is outside ERRAND_ALLOWED_ROOTS")
+
+
 def run_claude(cfg: Config, job: Job) -> str:
     """Invoke ``claude -p`` headlessly and return stdout.
 
@@ -76,7 +94,7 @@ def run_claude(cfg: Config, job: Job) -> str:
     no tools and runs in an empty temporary directory, so it can't see the
     worker's own directory (where ``.env`` lives).
     """
-    cwd = job.cwd or (str(cfg.claude_cwd) if cfg.claude_cwd else None)
+    cwd = resolve_cwd(cfg, job)
     with tempfile.TemporaryDirectory(prefix="errand-") as scratch:
         proc = subprocess.run(
             build_args(cfg, job, cwd),
