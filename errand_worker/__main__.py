@@ -7,10 +7,10 @@
 
 The daemon (``run``) is what a process manager (launchd/systemd) keeps alive.
 """
+
 from __future__ import annotations
 
 import sys
-import time
 import uuid
 
 from .config import Config

@@ -3,6 +3,7 @@
 Everything defaults to a local, cloud-free setup so ``errand-worker`` runs
 right after ``git clone``. Set ``ERRAND_STORE=dynamodb`` to switch to AWS.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,6 +24,12 @@ def _load_dotenv() -> None:
             continue
         k, _, v = line.partition("=")
         os.environ.setdefault(k.strip(), v.strip())
+
+
+def _allowed_roots(raw: str | None, default_cwd: str | None) -> list[Path]:
+    if raw:
+        return [Path(r).expanduser() for r in raw.split(os.pathsep) if r.strip()]
+    return [Path(default_cwd)] if default_cwd else []
 
 
 @dataclass
@@ -47,9 +54,14 @@ class Config:
     claude_cwd: Path | None
     # subprocess timeout for a single claude run (seconds)
     claude_timeout: float
+    # directories a job's cwd must be inside (ERRAND_ALLOWED_ROOTS, os.pathsep-separated).
+    # Jobs come from a web backend, so without this a job could point Claude at
+    # "/" or "~/.aws". Defaults to ERRAND_CLAUDE_CWD alone; empty means jobs
+    # cannot choose a cwd at all.
+    allowed_roots: list[Path]
 
     @classmethod
-    def load(cls) -> "Config":
+    def load(cls) -> Config:
         _load_dotenv()
         e = os.environ.get
         cwd = e("ERRAND_CLAUDE_CWD")
@@ -68,4 +80,5 @@ class Config:
             default_model=e("ERRAND_DEFAULT_MODEL", "sonnet"),
             claude_cwd=Path(cwd) if cwd else None,
             claude_timeout=float(e("ERRAND_CLAUDE_TIMEOUT", "900")),
+            allowed_roots=_allowed_roots(e("ERRAND_ALLOWED_ROOTS"), cwd),
         )

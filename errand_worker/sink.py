@@ -3,10 +3,13 @@
 The worker writes a job's result somewhere and records a reference (``result_ref``)
 back on the job. Local directory by default (no cloud); S3 adapter for production.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Protocol
+
+from .store import check_id
 
 
 class Sink(Protocol):
@@ -20,9 +23,9 @@ class LocalSink:
         self.dir = Path(base_dir)
 
     def put(self, owner: str, job_id: str, content: str) -> str:
-        out_dir = self.dir / owner
+        out_dir = self.dir / check_id("owner", owner)
         out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"{job_id}.txt"
+        path = out_dir / f"{check_id('id', job_id)}.txt"
         path.write_text(content, encoding="utf-8")
         return str(path)
 
@@ -38,7 +41,7 @@ class S3Sink:
         self.bucket = bucket
 
     def put(self, owner: str, job_id: str, content: str) -> str:
-        key = f"{owner}/{job_id}.txt"
+        key = f"{check_id('owner', owner)}/{check_id('id', job_id)}.txt"
         self.s3.put_object(
             Bucket=self.bucket,
             Key=key,

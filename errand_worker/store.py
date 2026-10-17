@@ -9,9 +9,11 @@ an optional ``cwd`` (a codebase to let Claude read), and a ``model``. The
 worker is not tied to any particular application; callers enqueue jobs and
 read results by ``result_ref``.
 """
+
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -25,7 +27,7 @@ class Job:
     id:         unique job id (caller-supplied; ULID/UUID recommended)
     owner:      partition key — lets one queue serve multiple users/apps
     status:     queued -> running -> done | error
-    prompt:     the instruction passed to Claude (``claude -p <prompt>``)
+    prompt:     the instruction passed to Claude (``claude -p``, via stdin)
     cwd:        optional path to a codebase Claude may read (Read/Glob/Grep)
     model:      optional model alias (e.g. "opus", "sonnet")
     result_ref: filled on completion — where the result was written (sink key)
@@ -44,9 +46,22 @@ class Job:
     updated_at: str = ""
 
     @classmethod
-    def from_item(cls, item: dict[str, Any]) -> "Job":
+    def from_item(cls, item: dict[str, Any]) -> Job:
         known = {f: item.get(f) for f in cls.__dataclass_fields__}
         return cls(**{k: v for k, v in known.items() if v is not None})
+
+
+# owner and id become file names (LocalJobStore / LocalSink) and S3 keys, and
+# jobs are enqueued by a web backend — so treat them as untrusted. Without this,
+# an id like "../../.ssh/authorized_keys" would write outside the results dir.
+_SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}")
+
+
+def check_id(kind: str, value: str) -> str:
+    """Return ``value`` if it is safe as a path segment, else raise ValueError."""
+    if not isinstance(value, str) or not _SAFE_ID.fullmatch(value):
+        raise ValueError(f"invalid {kind}: must match {_SAFE_ID.pattern}")
+    return value
 
 
 def _now() -> str:
@@ -71,7 +86,7 @@ class LocalJobStore:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def _path(self, job: Job) -> Path:
-        return self.dir / f"{job.owner}__{job.id}.json"
+        return self.dir / f"{check_id('owner', job.owner)}__{check_id('id', job.id)}.json"
 
     def enqueue(self, job: Job) -> Job:
         job.status = "queued"
@@ -81,12 +96,10 @@ class LocalJobStore:
 
     def _save(self, job: Job) -> None:
         job.updated_at = _now()
-        self._path(job).write_text(
-            json.dumps(asdict(job), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        self._path(job).write_text(json.dumps(asdict(job), ensure_ascii=False, indent=2), encoding="utf-8")
 
     def claim_next(self, owner: str) -> Job | None:
-        for p in sorted(self.dir.glob(f"{owner}__*.json")):
+        for p in sorted(self.dir.glob(f"{check_id('owner', owner)}__*.json")):
             item = json.loads(p.read_text(encoding="utf-8"))
             if item.get("status") == "queued":
                 job = Job.from_item(item)

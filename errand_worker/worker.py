@@ -11,16 +11,19 @@ is used or required; the CLI runs under your logged-in subscription.
     Code environment. Using a Claude subscription as the generation engine of a
     SaaS served to third parties may violate Anthropic's terms — check them.
 """
+
 from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import time
-from typing import Callable
+from collections.abc import Callable
+from pathlib import Path
 
 from .config import Config
 from .sink import Sink
-from .store import Job, JobStore
+from .store import Job, JobStore, check_id
 
 # A pre-processing hook: transform the prompt before it reaches Claude
 # (e.g. redaction/masking). Default is identity. Return the text to send.
@@ -31,30 +34,78 @@ def _identity(_job: Job, prompt: str) -> str:
     return prompt
 
 
+# Tools available when a job reads a codebase. ``--tools`` limits the set that
+# *exists* in the run (``--allowedTools`` would only pre-approve them), so
+# anything not listed here — Bash, Write, WebFetch, ... — is simply unavailable.
+CODEBASE_TOOLS = "Read,Glob,Grep"
+MAX_TURNS = "25"
+
+
+def build_args(cfg: Config, job: Job, cwd: str | None) -> list[str]:
+    """Build the ``claude`` command line for a job (the prompt is NOT included)."""
+    model = job.model or cfg.default_model
+    # The prompt goes to stdin, never argv: a prompt starting with "-" would
+    # otherwise be parsed as a CLI option (argument injection), and argv is
+    # visible to other local users via the process list.
+    args = [
+        cfg.claude_bin,
+        "-p",
+        "--model",
+        model,
+        # Don't load your MCP servers: they can reach mail, cloud accounts, etc.,
+        # and a job's prompt is untrusted input.
+        "--strict-mcp-config",
+        # Don't load project settings from the codebase. A hostile repository
+        # could ship .claude/settings.json hooks, and -p skips the workspace
+        # trust dialog, so they would run on this machine.
+        "--setting-sources",
+        "user",
+    ]
+    if cwd:
+        # Ground the answer in the codebase, read-only, bounded.
+        args += ["--tools", CODEBASE_TOOLS, "--max-turns", MAX_TURNS]
+    else:
+        # Text-only job: no tools at all.
+        args += ["--tools", ""]
+    return args
+
+
+def resolve_cwd(cfg: Config, job: Job) -> str | None:
+    """Return the directory Claude runs in, refusing a job cwd outside allowed roots.
+
+    Symlinks and ".." are resolved first, so a job can't escape a root with
+    "root/../.." or a link pointing elsewhere.
+    """
+    if not job.cwd:
+        return str(cfg.claude_cwd) if cfg.claude_cwd else None
+    target = Path(job.cwd).expanduser().resolve()
+    for root in cfg.allowed_roots:
+        if target.is_relative_to(root.expanduser().resolve()):
+            if not target.is_dir():
+                raise ValueError(f"job cwd is not a directory: {target}")
+            return str(target)
+    raise ValueError("job cwd is outside ERRAND_ALLOWED_ROOTS")
+
+
 def run_claude(cfg: Config, job: Job) -> str:
     """Invoke ``claude -p`` headlessly and return stdout.
 
-    If the job has a ``cwd`` (a codebase), Claude is allowed to read it with
-    Read/Glob/Grep so it can ground its answer in real code. Write/execute
-    tools are always disallowed so headless runs never stall on approval.
+    If the job has a ``cwd`` (a codebase), Claude may read it with
+    Read/Glob/Grep so it can ground its answer in real code. Otherwise it gets
+    no tools and runs in an empty temporary directory, so it can't see the
+    worker's own directory (where ``.env`` lives).
     """
-    model = job.model or cfg.default_model
-    cwd = job.cwd or (str(cfg.claude_cwd) if cfg.claude_cwd else None)
-
-    args = [cfg.claude_bin, "-p", job.prompt, "--model", model]
-    if cwd:
-        # Ground the answer in the codebase, read-only, bounded.
-        args += ["--allowedTools", "Read,Glob,Grep", "--max-turns", "25"]
-    else:
-        args += ["--disallowedTools", "Write,Edit,NotebookEdit,Bash"]
-
-    proc = subprocess.run(
-        args,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=cfg.claude_timeout,
-    )
+    cwd = resolve_cwd(cfg, job)
+    with tempfile.TemporaryDirectory(prefix="errand-") as scratch:
+        proc = subprocess.run(
+            build_args(cfg, job, cwd),
+            input=job.prompt,
+            cwd=cwd or scratch,
+            capture_output=True,
+            text=True,
+            timeout=cfg.claude_timeout,
+            check=False,  # returncode is inspected below to include stderr in the error
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"claude CLI failed (rc={proc.returncode}): {proc.stderr[:500]}")
     out = proc.stdout.strip()
@@ -64,6 +115,9 @@ def run_claude(cfg: Config, job: Job) -> str:
 
 
 def process(cfg: Config, store: JobStore, sink: Sink, job: Job, pre: PreProcess) -> None:
+    # Reject unsafe ids before spending a Claude run on the job.
+    check_id("owner", job.owner)
+    check_id("id", job.id)
     print(f"[job {job.id}] owner={job.owner} cwd={job.cwd or '-'} -> running")
     prompt = pre(job, job.prompt)
     job.prompt = prompt

@@ -117,11 +117,25 @@ Web バックエンドはこの形式の項目を保管先へ書き込むだけ�
 | `ERRAND_CLAUDE_BIN` | `claude` | Claude Code CLI のパス |
 | `ERRAND_DEFAULT_MODEL` | `sonnet` | ジョブがモデル未指定のときの既定 |
 | `ERRAND_CLAUDE_CWD` | — | 既定のコードベース（ジョブ側の `cwd` が優先） |
+| `ERRAND_ALLOWED_ROOTS` | `ERRAND_CLAUDE_CWD` | ジョブの `cwd` に許すディレクトリ（`:` 区切り）。未設定ならジョブは `cwd` を選べない |
 | `ERRAND_CLAUDE_TIMEOUT` | `900` | 1ジョブあたりの claude 実行上限（秒） |
 | `AWS_REGION` / `AWS_PROFILE` | `us-east-1` / — | AWS アダプタ用 |
 
 DynamoDB のキー構成: パーティションキー `owner`（S）、ソートキー `id`（S）。
 AWS アダプタは `pip install errand-worker[aws]` で入ります。
+
+## セキュリティ
+
+ジョブは Web から積まれる前提なので、ワーカーはジョブの中身を**外部入力**として扱います。
+
+| 守るもの | 対策 |
+|---|---|
+| プロンプトによる CLI オプションの注入 | プロンプトは引数ではなく標準入力で渡す |
+| コードベース以外の読み取り | ジョブの `cwd` は `ERRAND_ALLOWED_ROOTS` の中だけ（`..` と symlink は解決してから判定） |
+| ツールの濫用 | 使えるツールを `--tools` で限定（コードベースあり: `Read,Glob,Grep` / なし: 無し）。コードベースなしのジョブは空の一時ディレクトリで動かす |
+| 手元の MCP サーバーへの到達 | `--strict-mcp-config` で読み込まない |
+| 読ませるリポジトリに仕込まれたフック | `--setting-sources user` でコードベースの `.claude/settings.json` を読まない |
+| 結果ファイルのパストラバーサル | `owner` と `id` は英数字と `. _ @ + -` だけ |
 
 ## 常駐させる（macOS launchd）
 
