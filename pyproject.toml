@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Turn Claude Code into a self-hosted async AI worker — subscription-based, local-first, no API key."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "Akinori901" }]
 keywords = ["claude", "claude-code", "worker", "job-queue", "ai", "self-hosted", "anthropic"]
 dependencies = []
