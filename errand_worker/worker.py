@@ -129,9 +129,16 @@ def process(cfg: Config, store: JobStore, sink: Sink, job: Job, pre: PreProcess)
 
 def poll_once(cfg: Config, store: JobStore, sink: Sink, pre: PreProcess) -> bool:
     """Claim and process one job. Returns True if a job was handled."""
-    job = store.claim_next(cfg.owner)
+    stale_before = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - cfg.stale_after))
+    job = store.claim_next(cfg.owner, stale_before)
     if job is None:
         return False
+    if job.attempts > 1:
+        print(f"[job {job.id}] reclaimed a job left running (attempt {job.attempts})")
+    if job.attempts > cfg.max_attempts:
+        store.fail(job, f"gave up after {cfg.max_attempts} attempts (the worker never finished it)")
+        print(f"[job {job.id}] error: gave up after {cfg.max_attempts} attempts", file=sys.stderr)
+        return True
     try:
         process(cfg, store, sink, job, pre)
     except Exception as e:  # noqa: BLE001 — worker must survive any single job

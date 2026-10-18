@@ -2,7 +2,8 @@
 
 Contract:
   status: queued -> running -> done | error
-  claim_next(): take one queued job and atomically win "running" (dedup-safe)
+  claim_next(): take one queued job (or a running one whose worker died) and
+               atomically win "running" (dedup-safe)
 
 A job is deliberately generic: it carries a ``prompt`` (what to ask Claude),
 an optional ``cwd`` (a codebase to let Claude read), and a ``model``. The
@@ -33,6 +34,7 @@ class Job:
     result_ref: filled on completion — where the result was written (sink key)
     error:      filled on failure
     updated_at: ISO8601, maintained by the store
+    attempts:   how many times a worker has claimed this job (maintained by the store)
     """
 
     id: str
@@ -44,11 +46,14 @@ class Job:
     result_ref: str = ""
     error: str = ""
     updated_at: str = ""
+    attempts: int = 0
 
     @classmethod
     def from_item(cls, item: dict[str, Any]) -> Job:
         known = {f: item.get(f) for f in cls.__dataclass_fields__}
-        return cls(**{k: v for k, v in known.items() if v is not None})
+        job = cls(**{k: v for k, v in known.items() if v is not None})
+        job.attempts = int(job.attempts)  # DynamoDB returns numbers as Decimal
+        return job
 
 
 # owner and id become file names (LocalJobStore / LocalSink) and S3 keys, and
@@ -68,8 +73,19 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def _claimable(item: dict[str, Any], stale_before: str | None) -> bool:
+    """queued, or running but not updated since ``stale_before`` (its worker died)."""
+    if item.get("status") == "queued":
+        return True
+    return (
+        stale_before is not None
+        and item.get("status") == "running"
+        and str(item.get("updated_at", "")) < stale_before  # ISO8601 (UTC, Z) sorts as text
+    )
+
+
 class JobStore(Protocol):
-    def claim_next(self, owner: str) -> Job | None: ...
+    def claim_next(self, owner: str, stale_before: str | None = None) -> Job | None: ...
     def complete(self, job: Job, result_ref: str) -> None: ...
     def fail(self, job: Job, error: str) -> None: ...
 
@@ -98,12 +114,13 @@ class LocalJobStore:
         job.updated_at = _now()
         self._path(job).write_text(json.dumps(asdict(job), ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def claim_next(self, owner: str) -> Job | None:
+    def claim_next(self, owner: str, stale_before: str | None = None) -> Job | None:
         for p in sorted(self.dir.glob(f"{check_id('owner', owner)}__*.json")):
             item = json.loads(p.read_text(encoding="utf-8"))
-            if item.get("status") == "queued":
+            if _claimable(item, stale_before):
                 job = Job.from_item(item)
                 job.status = "running"
+                job.attempts += 1
                 self._save(job)  # single-process locally: optimistic is enough
                 return job
         return None
@@ -133,7 +150,7 @@ class DynamoJobStore:
         self.ddb = session.resource("dynamodb", region_name=region)
         self.table = self.ddb.Table(table_name)
 
-    def claim_next(self, owner: str) -> Job | None:
+    def claim_next(self, owner: str, stale_before: str | None = None) -> Job | None:
         from boto3.dynamodb.conditions import Attr, Key
         from botocore.exceptions import ClientError
 
@@ -145,23 +162,34 @@ class DynamoJobStore:
         # So we drop Limit and page with LastEvaluatedKey until a queued job is found.
         last_key: dict | None = None
         while True:
+            claimable = Attr("status").eq("queued")
+            if stale_before is not None:
+                # A job left "running" by a worker that died is picked up again.
+                claimable = claimable | (Attr("status").eq("running") & Attr("updated_at").lt(stale_before))
             kwargs: dict = {
                 "KeyConditionExpression": Key("owner").eq(owner),
-                "FilterExpression": Attr("status").eq("queued"),
+                "FilterExpression": claimable,
             }
             if last_key:
                 kwargs["ExclusiveStartKey"] = last_key
             resp = self.table.query(**kwargs)
             for item in resp.get("Items", []):
+                # Win the job only if nobody touched it since we read it: still the same
+                # status and updated_at. Without the updated_at check, two workers could
+                # both reclaim the same stale job.
+                condition = Attr("status").eq(item["status"])
+                if item["status"] == "running":
+                    condition = condition & Attr("updated_at").eq(item.get("updated_at", ""))
                 try:
                     self.table.update_item(
                         Key={"owner": item["owner"], "id": item["id"]},
-                        UpdateExpression="SET #s = :run, #u = :t",
-                        ConditionExpression=Attr("status").eq("queued"),
+                        UpdateExpression="SET #s = :run, #u = :t ADD attempts :one",
+                        ConditionExpression=condition,
                         ExpressionAttributeNames={"#s": "status", "#u": "updated_at"},
-                        ExpressionAttributeValues={":run": "running", ":t": _now()},
+                        ExpressionAttributeValues={":run": "running", ":t": _now(), ":one": 1},
                     )
                     item["status"] = "running"
+                    item["attempts"] = int(item.get("attempts", 0)) + 1
                     return Job.from_item(item)
                 except ClientError as e:
                     if e.response["Error"]["Code"] == "ConditionalCheckFailedException":

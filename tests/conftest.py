@@ -28,6 +28,8 @@ def make_config(tmp_path: Path):
             "claude_cwd": None,
             "claude_timeout": 10.0,
             "allowed_roots": [],
+            "stale_after": 600.0,
+            "max_attempts": 3,
         }
         values.update(overrides)
         return Config(**values)

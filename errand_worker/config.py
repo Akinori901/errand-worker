@@ -32,6 +32,17 @@ def _allowed_roots(raw: str | None, default_cwd: str | None) -> list[Path]:
     return [Path(default_cwd)] if default_cwd else []
 
 
+def _stale_after(raw: str | None, claude_timeout: float) -> float:
+    """Default: the claude timeout plus 5 minutes. Never shorter than the timeout."""
+    value = float(raw) if raw else claude_timeout + 300
+    if value <= claude_timeout:
+        raise ValueError(
+            f"ERRAND_STALE_AFTER ({value}) must be longer than ERRAND_CLAUDE_TIMEOUT ({claude_timeout}),"
+            " or jobs that are still running would be claimed twice"
+        )
+    return value
+
+
 @dataclass
 class Config:
     owner: str
@@ -59,6 +70,12 @@ class Config:
     # "/" or "~/.aws". Defaults to ERRAND_CLAUDE_CWD alone; empty means jobs
     # cannot choose a cwd at all.
     allowed_roots: list[Path]
+    # a "running" job not updated for this long is treated as abandoned (its worker
+    # died) and claimed again. Must exceed claude_timeout so live jobs aren't stolen.
+    stale_after: float
+    # a job claimed this many times without finishing is marked as error instead of
+    # retried forever (e.g. a job that crashes the worker every time)
+    max_attempts: int
 
     @classmethod
     def load(cls) -> Config:
@@ -81,4 +98,6 @@ class Config:
             claude_cwd=Path(cwd) if cwd else None,
             claude_timeout=float(e("ERRAND_CLAUDE_TIMEOUT", "900")),
             allowed_roots=_allowed_roots(e("ERRAND_ALLOWED_ROOTS"), cwd),
+            stale_after=_stale_after(e("ERRAND_STALE_AFTER"), float(e("ERRAND_CLAUDE_TIMEOUT", "900"))),
+            max_attempts=int(e("ERRAND_MAX_ATTEMPTS", "3")),
         )
