@@ -120,6 +120,8 @@ polls (files by default, or DynamoDB with `ERRAND_STORE=dynamodb`).
 | `ERRAND_CLAUDE_CWD` | — | default codebase root (a job's own `cwd` overrides) |
 | `ERRAND_ALLOWED_ROOTS` | `ERRAND_CLAUDE_CWD` | dirs a job's `cwd` must be inside (`:`-separated). Unset: jobs can't choose a `cwd` |
 | `ERRAND_CLAUDE_TIMEOUT` | `900` | per-job claude timeout (s) |
+| `ERRAND_STALE_AFTER` | timeout + 300 | a `running` job not updated for this long is treated as abandoned (its worker died) and claimed again. Must exceed the timeout |
+| `ERRAND_MAX_ATTEMPTS` | `3` | attempts including reclaims; after that the job is marked `error` (so a job that crashes the worker isn't retried forever) |
 | `AWS_REGION` / `AWS_PROFILE` | `us-east-1` / — | for the AWS adapters |
 
 DynamoDB table key schema: partition key `owner` (S), sort key `id` (S).

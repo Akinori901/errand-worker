@@ -119,6 +119,8 @@ Web バックエンドはこの形式の項目を保管先へ書き込むだけ�
 | `ERRAND_CLAUDE_CWD` | — | 既定のコードベース（ジョブ側の `cwd` が優先） |
 | `ERRAND_ALLOWED_ROOTS` | `ERRAND_CLAUDE_CWD` | ジョブの `cwd` に許すディレクトリ（`:` 区切り）。未設定ならジョブは `cwd` を選べない |
 | `ERRAND_CLAUDE_TIMEOUT` | `900` | 1ジョブあたりの claude 実行上限（秒） |
+| `ERRAND_STALE_AFTER` | 実行上限 + 300 | `running` のまま更新が無いジョブを「ワーカーが落ちた」とみなして拾い直すまでの秒数。実行上限より長くする |
+| `ERRAND_MAX_ATTEMPTS` | `3` | 拾い直しを含めた試行回数の上限。超えたら `error` にする（毎回ワーカーを落とすジョブを繰り返さない） |
 | `AWS_REGION` / `AWS_PROFILE` | `us-east-1` / — | AWS アダプタ用 |
 
 DynamoDB のキー構成: パーティションキー `owner`（S）、ソートキー `id`（S）。
